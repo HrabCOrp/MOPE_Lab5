@@ -5,6 +5,7 @@ from scipy.stats import f, t, ttest_ind, norm
 from functools import reduce
 from itertools import compress
 import numpy as np
+import time
 
 N = 15
 m = 3
@@ -119,67 +120,74 @@ x_natur = [[min_x1, min_x2, min_x3],
            [x0[0], x0[1], l * detx[2] + x0[2]],
            [x0[0], x0[1], x0[2]]]
 
-xMatrix_coded = gen_matrix(x_coded)
-print("Кодовані фактори:")
-for row in xMatrix_coded:
-    print(row)
-
-xMatrix_natur = gen_matrix(x_natur)
-with_null_x = list(map(lambda x: [1] + x, xMatrix_natur))
-
-y_values = [[random.random() * (max_y - min_y) + min_y for i in range(m)] for j in range(N)]
-
-# Критерій Кохрена (Перша статистична перевірка)
-while not cochran_criterion(m, N, y_values):
-    m += 1
+duration = 0
+for i in range(100):
+    start = time.time()
+    xMatrix_coded = gen_matrix(x_coded)
+    print("Кодовані фактори:")
+    for row in xMatrix_coded:
+        print(row)
+    
+    xMatrix_natur = gen_matrix(x_natur)
+    with_null_x = list(map(lambda x: [1] + x, xMatrix_natur))
+    
     y_values = [[random.random() * (max_y - min_y) + min_y for i in range(m)] for j in range(N)]
-
-y_i = np.array([np.average(row) for row in y_values])
-coefficients = [[m_ij(x_i(column, x_coded) * x_i(row, x_coded)) for column in range(11)] for row in
-                range(11)]
-free_values = [m_ij(y_i, x_i(i, x_coded)) for i in range(11)]
-beta_coef = np.linalg.solve(coefficients, free_values)
-
-# Критерій Стьюдента (Друга статистична перевірка)
-y_matrix = y_values
-f3 = (m - 1) * N
-q = 1 - p
-t = student_value(f3, q)
-print("\nКритерій Стьюдента:")
-
-# Оцінка генеральної дисперсії відтворюваності
-Sb = np.average(list(map(np.var, y_matrix)))
-meanY = np.array(list(map(np.average, y_matrix)))
-Sbs_2 = Sb / (N * m)
-Sbs = math.sqrt(Sbs_2)
-x_vals = [x_i(i, x_coded) for i in range(11)]
-t_i = np.array([abs(beta_coef[i]) / Sbs for i in range(len(beta_coef))])
-
-# Перевірка значущості коефіцієнтів
-importance = [True if el > t else False for el in list(t_i)]
-
-x_i_names = list(compress(["1", "x1", "x2", "x3", "x12", "x13", "x23", "x123", "x1^2", "x2^2", "x3^2"], importance))
-betas = list(compress(beta_coef, importance))  # якщо importance=False => значення beta_coef не ввійде в betas
-
-# Пошук нового рівняння регресії
-print("Рівняння регресії без незначимих членів: y = ", end="")
-for i in range(len(betas)):
-    print(f" {betas[i]:+.3f}*{x_i_names[i]}", end="")
-
-# Критерій Фішера (Третя статистична перевірка)
-d = len(list(filter(None, importance)))
-y_matrix = y_values
-f3 = (m - 1) * N
-f4 = N - d
-q = 1 - p
-print("\n\nКритерій Фішера:")
-
-yTheor = calculate_yTheor(xMatrix_natur, beta_coef, importance)
-meanY = np.array(list(map(np.average, y_matrix)))
-# Дисперсія адекватності
-Sad = m / (N - d) * (sum((yTheor - meanY) ** 2))
-yVariance = np.array(list(map(np.var, y_matrix)))
-s_v = np.average(yVariance)
-Fp = float(Sad / s_v)
-Ft = fisher_value(f3, f4, q)
-print(f"Fp = {Fp:.3f}, Ft = {Ft:.3f}", "\nFp < Ft => модель адекватна" if Fp < Ft else "Fp > Ft => модель неадекватна")
+    
+    # Критерій Кохрена (Перша статистична перевірка)
+    while not cochran_criterion(m, N, y_values):
+        m += 1
+        y_values = [[random.random() * (max_y - min_y) + min_y for i in range(m)] for j in range(N)]
+    
+    y_i = np.array([np.average(row) for row in y_values])
+    coefficients = [[m_ij(x_i(column, x_coded) * x_i(row, x_coded)) for column in range(11)] for row in
+                    range(11)]
+    free_values = [m_ij(y_i, x_i(i, x_coded)) for i in range(11)]
+    beta_coef = np.linalg.solve(coefficients, free_values)
+    
+    # Критерій Стьюдента (Друга статистична перевірка)
+    y_matrix = y_values
+    f3 = (m - 1) * N
+    q = 1 - p
+    T = student_value(f3, q)
+    print("\nКритерій Стьюдента:")
+    
+    # Оцінка генеральної дисперсії відтворюваності
+    Sb = np.average(list(map(np.var, y_matrix)))
+    meanY = np.array(list(map(np.average, y_matrix)))
+    Sbs_2 = Sb / (N * m)
+    Sbs = math.sqrt(Sbs_2)
+    x_vals = [x_i(i, x_coded) for i in range(11)]
+    t_i = np.array([abs(beta_coef[i]) / Sbs for i in range(len(beta_coef))])
+    
+    # Перевірка значущості коефіцієнтів
+    importance = [True if el > T else False for el in list(t_i)]
+    
+    x_i_names = list(compress(["1", "x1", "x2", "x3", "x12", "x13", "x23", "x123", "x1^2", "x2^2", "x3^2"], importance))
+    betas = list(compress(beta_coef, importance))  # якщо importance=False => значення beta_coef не ввійде в betas
+    
+    # Пошук нового рівняння регресії
+    print("Рівняння регресії без незначимих членів: y = ", end="")
+    for i in range(len(betas)):
+        print(f" {betas[i]:+.3f}*{x_i_names[i]}", end="")
+    
+    # Критерій Фішера (Третя статистична перевірка)
+    d = len(list(filter(None, importance)))
+    y_matrix = y_values
+    f3 = (m - 1) * N
+    f4 = N - d
+    q = 1 - p
+    print("\n\nКритерій Фішера:")
+    
+    yTheor = calculate_yTheor(xMatrix_natur, beta_coef, importance)
+    meanY = np.array(list(map(np.average, y_matrix)))
+    # Дисперсія адекватності
+    Sad = m / (N - d) * (sum((yTheor - meanY) ** 2))
+    yVariance = np.array(list(map(np.var, y_matrix)))
+    s_v = np.average(yVariance)
+    Fp = float(Sad / s_v)
+    Ft = fisher_value(f3, f4, q)
+    print(f"Fp = {Fp:.3f}, Ft = {Ft:.3f}", "\nFp < Ft => модель адекватна" if Fp < Ft else "Fp > Ft => модель неадекватна\n\n")
+    stop = time.time()
+    duration += stop - start
+print ("В середньому одне проходження триває", duration/100)
+    
